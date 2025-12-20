@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="nav">
+    <a href="{{ url_for('create') }}" class="btn btn-success">➕ 新增聯絡人</a>
+    <div class="search-box">
+        <input type="text" id="searchInput" value="{{ query }}" placeholder="搜尋名稱或電話...">
+        <button onclick="search()">🔍 搜尋</button>
+    </div>
+</div>
+
+<div class="content">
+    <h2 style="margin-bottom: 20px;">🔍 搜尋結果：「{{ query }}」</h2>
+
+    {% if contacts %}
+    <p style="margin-bottom: 20px; color: #666;">找到 <strong>{{ contacts|length }}</strong> 筆結果</p>
+    <div class="contacts-list">
+        {% for contact in contacts %}
+        <div class="contact-card">
+            <div class="contact-info">
+                <div class="contact-name">{{ contact.name }}</div>
+                <div class="contact-details">
+                    <div class="contact-detail">
+                        <label>📱 電話</label>
+                        <span>{{ contact.phone }}</span>
+                    </div>
+                    {% if contact.email %}
+                    <div class="contact-detail">
+                        <label>📧 信箱</label>
+                        <span>{{ contact.email }}</span>
+                    </div>
+                    {% endif %}
+                    {% if contact.company %}
+                    <div class="contact-detail">
+                        <label>🏢 公司</label>
+                        <span>{{ contact.company }}</span>
+                    </div>
+                    {% endif %}
+                    {% if contact.category %}
+                    <div class="contact-detail">
+                        <label>🏷️ 分類</label>
+                        <span class="category-badge {{ contact.category }}">{{ contact.category }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="contact-actions">
+                <a href="{{ url_for('view', contact_id=contact.id) }}" class="btn btn-primary">👁️ 查看</a>
+                <a href="{{ url_for('edit', contact_id=contact.id) }}" class="btn btn-success">✏️ 編輯</a>
+                <form method="POST" action="{{ url_for('delete', contact_id=contact.id) }}" style="display: inline;"
+                    onsubmit="return confirm('確定要刪除 {{ contact.name }} 嗎？');">
+                    <button type="submit" class="btn btn-danger">🗑️ 刪除</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">🔍</div>
+        <h2>找不到符合的聯絡人</h2>
+        <p>試試改變搜尋條件，或 <a href="{{ url_for('index') }}"
+                style="color: var(--primary); text-decoration: underline;">返回清單</a></p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+    function search() {
+        const query = document.getElementById('searchInput').value.trim();
+        if (query) {
+            window.location.href = "{{ url_for('search') }}?q=" + encodeURIComponent(query);
+        } else {
+            window.location.href = "{{ url_for('index') }}";
+        }
+    }
+
+    document.getElementById('searchInput').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') {
+            search();
+        }
+    });
+</script>
+{% endblock %}

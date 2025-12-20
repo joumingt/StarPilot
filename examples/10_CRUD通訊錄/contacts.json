@@ -1,0 +1,35 @@
+[
+  {
+    "id": "2c59a272",
+    "name": "王小明12",
+    "phone": "0912-345-678",
+    "email": "xiaoming@example.com",
+    "company": "美好科技",
+    "category": "同事",
+    "notes": "每週三開會",
+    "created_at": "2025-12-20T13:52:15.142145",
+    "updated_at": "2025-12-20T14:12:11.933986"
+  },
+  {
+    "id": "de1cee52",
+    "name": "張三233",
+    "phone": "0912345678",
+    "email": "zhang@example.com",
+    "company": "科技公司",
+    "category": "同事",
+    "notes": "開發工程師",
+    "created_at": "2025-12-20T13:54:21.777677",
+    "updated_at": "2025-12-20T14:12:20.194466"
+  },
+  {
+    "id": "4251019d",
+    "name": "曾昭明",
+    "phone": "0958778940",
+    "email": "joumingt@gmail.com",
+    "company": "",
+    "category": "同事",
+    "notes": "",
+    "created_at": "2025-12-20T13:55:20.596634",
+    "updated_at": "2025-12-20T13:56:59.881725"
+  }
+]

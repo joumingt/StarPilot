@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="content">
+    <h2 style="margin-bottom: 30px;">➕ 新增聯絡人</h2>
+
+    <form method="POST" style="max-width: 600px;">
+        <div class="form-group">
+            <label for="name">* 名稱（必填）</label>
+            <input type="text" id="name" name="name" required placeholder="請輸入聯絡人名稱">
+        </div>
+
+        <div class="form-group">
+            <label for="phone">* 電話號碼（必填）</label>
+            <input type="tel" id="phone" name="phone" required placeholder="例：0912-345-678">
+        </div>
+
+        <div class="form-group">
+            <label for="email">📧 電子郵件</label>
+            <input type="email" id="email" name="email" placeholder="example@email.com">
+        </div>
+
+        <div class="form-group">
+            <label for="company">🏢 公司名稱</label>
+            <input type="text" id="company" name="company" placeholder="公司名稱">
+        </div>
+
+        <div class="form-group">
+            <label for="category">🏷️ 分類</label>
+            <select id="category" name="category">
+                <option value="">-- 選擇分類 --</option>
+                <option value="同事">同事</option>
+                <option value="客戶">客戶</option>
+                <option value="家人">家人</option>
+                <option value="朋友">朋友</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="notes">📝 備註</label>
+            <textarea id="notes" name="notes" placeholder="添加備註..."></textarea>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-success">✅ 確認新增</button>
+            <a href="{{ url_for('index') }}" class="btn btn-primary" style="text-align: center;">← 返回清單</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
