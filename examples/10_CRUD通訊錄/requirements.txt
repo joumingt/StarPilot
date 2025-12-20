@@ -1,3 +1,4 @@
+streamlit==1.28.1
 flask==3.0.0
 flask-sqlalchemy==3.1.1
 flask-httpauth==4.8.0
