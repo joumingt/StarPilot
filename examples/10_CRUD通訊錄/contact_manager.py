@@ -31,13 +31,23 @@ class ContactManager:
         1. Streamlit Secrets (部署到 Streamlit Cloud)
         2. 環境變數 (本地開發)
         """
-        # 優先使用 Streamlit Secrets
+        self.supabase_url = None
+        self.supabase_key = None
+
+        # 優先使用 Streamlit Secrets（雲端部署）
         try:
             import streamlit as st
-            self.supabase_url = st.secrets.get("SUPABASE_URL")
-            self.supabase_key = st.secrets.get("SUPABASE_KEY")
-        except (ImportError, AttributeError):
-            # 回退到環境變數
+            if hasattr(st, 'secrets'):
+                try:
+                    self.supabase_url = st.secrets.get("SUPABASE_URL")
+                    self.supabase_key = st.secrets.get("SUPABASE_KEY")
+                except Exception:
+                    pass
+        except ImportError:
+            pass
+
+        # 如果沒有取得 Streamlit Secrets，回退到環境變數（本地開發）
+        if not self.supabase_url or not self.supabase_key:
             self.supabase_url = os.getenv("SUPABASE_URL")
             self.supabase_key = os.getenv("SUPABASE_KEY")
 
