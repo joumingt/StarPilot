@@ -1,41 +1,38 @@
 """
-CRUD 通訊錄管理系統
+CRUD 通訊錄管理系統 - Supabase 版本
 功能：新增、查看、修改、刪除聯絡人
 """
 
-import json
 import os
 from datetime import datetime
 from typing import List, Dict, Optional
+from supabase import create_client, Client
+from dotenv import load_dotenv
+
+# 載入環境變數
+load_dotenv()
 
 
 class ContactManager:
-    """通訊錄管理系統主類"""
+    """通訊錄管理系統主類 - Supabase 版本"""
 
-    def __init__(self, db_file: str = "contacts.json"):
+    def __init__(self):
         """
         初始化通訊錄管理系統
 
-        Args:
-            db_file: 資料庫檔案路徑
+        環境變數需要：
+        - SUPABASE_URL: Supabase 專案 URL
+        - SUPABASE_KEY: Supabase API Key
         """
-        self.db_file = db_file
-        self.contacts = self._load_contacts()
+        self.supabase_url = os.getenv("SUPABASE_URL")
+        self.supabase_key = os.getenv("SUPABASE_KEY")
 
-    def _load_contacts(self) -> List[Dict]:
-        """載入聯絡人清單"""
-        if os.path.exists(self.db_file):
-            try:
-                with open(self.db_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except json.JSONDecodeError:
-                return []
-        return []
+        if not self.supabase_url or not self.supabase_key:
+            raise ValueError(
+                "請設定 SUPABASE_URL 和 SUPABASE_KEY 環境變數")
 
-    def _save_contacts(self) -> None:
-        """保存聯絡人清單"""
-        with open(self.db_file, 'w', encoding='utf-8') as f:
-            json.dump(self.contacts, f, ensure_ascii=False, indent=2)
+        self.client: Client = create_client(
+            self.supabase_url, self.supabase_key)
 
     def create(self, name: str, phone: str, email: str = "",
                company: str = "", category: str = "", notes: str = "") -> Dict:
@@ -56,25 +53,36 @@ class ContactManager:
         if not name or not phone:
             raise ValueError("名稱和電話號碼為必填項目")
 
-        # 檢查電話號碼是否已存在
-        if any(c['phone'] == phone for c in self.contacts):
-            raise ValueError(f"電話號碼 {phone} 已存在")
+        try:
+            # 檢查電話號碼是否已存在
+            existing = self.client.table("contacts").select(
+                "id").eq("phone", phone).execute()
 
-        contact = {
-            'id': self._generate_id(),
-            'name': name,
-            'phone': phone,
-            'email': email,
-            'company': company,
-            'category': category,
-            'notes': notes,
-            'created_at': datetime.now().isoformat(),
-            'updated_at': datetime.now().isoformat()
-        }
+            if existing.data and len(existing.data) > 0:
+                raise ValueError(f"電話號碼 {phone} 已存在")
 
-        self.contacts.append(contact)
-        self._save_contacts()
-        return contact
+            # 新增聯絡人
+            contact_data = {
+                'name': name,
+                'phone': phone,
+                'email': email,
+                'company': company,
+                'category': category,
+                'notes': notes,
+                'created_at': datetime.utcnow().isoformat(),
+                'updated_at': datetime.utcnow().isoformat()
+            }
+
+            response = self.client.table("contacts").insert(
+                contact_data).execute()
+
+            if response.data:
+                return response.data[0]
+            else:
+                raise ValueError("新增聯絡人失敗")
+
+        except Exception as e:
+            raise ValueError(f"新增聯絡人時出錯: {str(e)}")
 
     def read(self, contact_id: Optional[str] = None) -> List[Dict] | Dict:
         """
@@ -86,20 +94,41 @@ class ContactManager:
         Returns:
             聯絡人資料或聯絡人清單
         """
-        if contact_id:
-            for contact in self.contacts:
-                if contact['id'] == contact_id:
-                    return contact
-            raise ValueError(f"找不到 ID 為 {contact_id} 的聯絡人")
-        return self.contacts
+        try:
+            if contact_id:
+                response = self.client.table("contacts").select(
+                    "*").eq("id", contact_id).execute()
+                if response.data and len(response.data) > 0:
+                    return response.data[0]
+                else:
+                    raise ValueError(f"找不到 ID 為 {contact_id} 的聯絡人")
+            else:
+                response = self.client.table("contacts").select(
+                    "*").order("created_at", desc=False).execute()
+                return response.data if response.data else []
+
+        except Exception as e:
+            raise ValueError(f"讀取聯絡人時出錯: {str(e)}")
 
     def read_by_name(self, name: str) -> List[Dict]:
         """按名稱查詢聯絡人"""
-        return [c for c in self.contacts if name in c['name']]
+        try:
+            response = self.client.table("contacts").select(
+                "*").ilike("name", f"%{name}%").execute()
+            return response.data if response.data else []
+
+        except Exception as e:
+            raise ValueError(f"按名稱查詢時出錯: {str(e)}")
 
     def read_by_category(self, category: str) -> List[Dict]:
         """按分類查詢聯絡人"""
-        return [c for c in self.contacts if c.get('category') == category]
+        try:
+            response = self.client.table("contacts").select(
+                "*").eq("category", category).execute()
+            return response.data if response.data else []
+
+        except Exception as e:
+            raise ValueError(f"按分類查詢時出錯: {str(e)}")
 
     def update(self, contact_id: str, **kwargs) -> Dict:
         """
@@ -112,20 +141,36 @@ class ContactManager:
         Returns:
             更新後的聯絡人資料
         """
-        for contact in self.contacts:
-            if contact['id'] == contact_id:
-                # 不允許更新 ID 和建立時間
-                allowed_fields = {'name', 'phone', 'email',
-                                  'company', 'category', 'notes'}
-                for key, value in kwargs.items():
-                    if key in allowed_fields:
-                        contact[key] = value
+        try:
+            # 不允許更新 ID 和建立時間
+            allowed_fields = {'name', 'phone', 'email',
+                              'company', 'category', 'notes'}
 
-                contact['updated_at'] = datetime.now().isoformat()
-                self._save_contacts()
-                return contact
+            update_data = {}
+            for key, value in kwargs.items():
+                if key in allowed_fields:
+                    update_data[key] = value
 
-        raise ValueError(f"找不到 ID 為 {contact_id} 的聯絡人")
+            # 檢查新電話是否已被其他聯絡人使用
+            if 'phone' in update_data:
+                existing = self.client.table("contacts").select(
+                    "id").eq("phone", update_data['phone']).neq("id", contact_id).execute()
+                if existing.data and len(existing.data) > 0:
+                    raise ValueError(
+                        f"電話號碼 {update_data['phone']} 已被使用")
+
+            update_data['updated_at'] = datetime.utcnow().isoformat()
+
+            response = self.client.table("contacts").update(
+                update_data).eq("id", contact_id).execute()
+
+            if response.data and len(response.data) > 0:
+                return response.data[0]
+            else:
+                raise ValueError(f"找不到 ID 為 {contact_id} 的聯絡人")
+
+        except Exception as e:
+            raise ValueError(f"更新聯絡人時出錯: {str(e)}")
 
     def delete(self, contact_id: str) -> Dict:
         """
@@ -137,13 +182,18 @@ class ContactManager:
         Returns:
             被刪除的聯絡人資料
         """
-        for i, contact in enumerate(self.contacts):
-            if contact['id'] == contact_id:
-                deleted = self.contacts.pop(i)
-                self._save_contacts()
-                return deleted
+        try:
+            # 先取得聯絡人資料（以便返回）
+            contact = self.read(contact_id)
 
-        raise ValueError(f"找不到 ID 為 {contact_id} 的聯絡人")
+            # 刪除聯絡人
+            self.client.table("contacts").delete().eq(
+                "id", contact_id).execute()
+
+            return contact
+
+        except Exception as e:
+            raise ValueError(f"刪除聯絡人時出錯: {str(e)}")
 
     def _generate_id(self) -> str:
         """生成唯一的 ID"""
@@ -154,65 +204,101 @@ class ContactManager:
         """匯出聯絡人為 CSV 檔案"""
         import csv
 
-        if not self.contacts:
-            raise ValueError("沒有聯絡人可以匯出")
+        try:
+            contacts = self.read()
 
-        fields = ['id', 'name', 'phone', 'email',
-                  'company', 'category', 'notes']
+            if not contacts:
+                raise ValueError("沒有聯絡人可以匯出")
 
-        with open(filename, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=fields)
-            writer.writeheader()
-            for contact in self.contacts:
-                writer.writerow({field: contact.get(field, '')
-                                for field in fields})
+            fields = ['id', 'name', 'phone', 'email',
+                      'company', 'category', 'notes', 'created_at', 'updated_at']
 
-        return f"已匯出至 {filename}"
+            with open(filename, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=fields)
+                writer.writeheader()
+                for contact in contacts:
+                    writer.writerow({field: contact.get(field, '')
+                                    for field in fields})
+
+            return f"已匯出至 {filename}"
+
+        except Exception as e:
+            raise ValueError(f"匯出聯絡人時出錯: {str(e)}")
 
     def import_from_csv(self, filename: str) -> int:
         """從 CSV 檔案匯入聯絡人"""
         import csv
 
         imported_count = 0
-        with open(filename, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                try:
-                    self.create(
-                        name=row['name'],
-                        phone=row['phone'],
-                        email=row.get('email', ''),
-                        company=row.get('company', ''),
-                        category=row.get('category', ''),
-                        notes=row.get('notes', '')
-                    )
-                    imported_count += 1
-                except ValueError:
-                    # 如果已存在則跳過
-                    pass
+        try:
+            with open(filename, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    try:
+                        self.create(
+                            name=row['name'],
+                            phone=row['phone'],
+                            email=row.get('email', ''),
+                            company=row.get('company', ''),
+                            category=row.get('category', ''),
+                            notes=row.get('notes', '')
+                        )
+                        imported_count += 1
+                    except ValueError:
+                        # 如果已存在則跳過
+                        pass
 
-        return imported_count
+            return imported_count
+
+        except Exception as e:
+            raise ValueError(f"匯入聯絡人時出錯: {str(e)}")
 
     def get_statistics(self) -> Dict:
         """取得統計資訊"""
-        categories = {}
-        for contact in self.contacts:
-            cat = contact.get('category', '未分類')
-            categories[cat] = categories.get(cat, 0) + 1
+        try:
+            contacts = self.read()
 
-        return {
-            'total_contacts': len(self.contacts),
-            'categories': categories
-        }
+            categories = {}
+            for contact in contacts:
+                cat = contact.get('category', '未分類')
+                categories[cat] = categories.get(cat, 0) + 1
+
+            return {
+                'total_contacts': len(contacts),
+                'categories': categories
+            }
+
+        except Exception as e:
+            raise ValueError(f"取得統計資訊時出錯: {str(e)}")
+
+    def delete_all(self) -> int:
+        """刪除所有聯絡人（謹慎使用）"""
+        try:
+            contacts = self.read()
+            count = len(contacts)
+
+            for contact in contacts:
+                self.client.table("contacts").delete().eq(
+                    "id", contact['id']).execute()
+
+            return count
+
+        except Exception as e:
+            raise ValueError(f"刪除所有聯絡人時出錯: {str(e)}")
 
 
 def main():
     """命令行介面示範"""
-    manager = ContactManager("contacts.json")
+    try:
+        manager = ContactManager()
+    except ValueError as e:
+        print(f"❌ 初始化失敗: {str(e)}")
+        print("請檢查 .env 檔案中的 SUPABASE_URL 和 SUPABASE_KEY")
+        return
 
     while True:
         print("\n" + "="*50)
-        print("📇 CRUD 通訊錄管理系統")
+        print("📇 CRUD 通訊錄管理系統 (Supabase 版本)")
         print("="*50)
         print("1️⃣  新增聯絡人 (CREATE)")
         print("2️⃣  查看聯絡人 (READ)")

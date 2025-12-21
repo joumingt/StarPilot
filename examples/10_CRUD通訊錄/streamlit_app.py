@@ -1,54 +1,55 @@
 """
-CRUD 通訊錄 - Streamlit 簡化版
+CRUD 通訊錄 - Streamlit 簡化版 (Supabase 版本)
 """
 
 import streamlit as st
-import json
-import os
+from contact_manager import ContactManager
 from datetime import datetime
-import uuid
+import os
+from dotenv import load_dotenv
+
+# 載入環境變數
+load_dotenv()
 
 st.set_page_config(page_title="📇 通訊錄", layout="wide")
 
 st.title("📇 CRUD 通訊錄管理系統")
-st.write("簡單易用的聯絡人管理應用")
+st.write("簡單易用的聯絡人管理應用 (Supabase 雲端版)")
 
-# ========== 資料庫操作 ==========
-DB_FILE = "contacts.json"
-
-
-def load_contacts():
-    if os.path.exists(DB_FILE):
-        try:
-            with open(DB_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except:
-            return []
-    return []
+# ========== 初始化 ==========
 
 
-def save_contacts(contacts):
-    with open(DB_FILE, 'w', encoding='utf-8') as f:
-        json.dump(contacts, f, ensure_ascii=False, indent=2)
+@st.cache_resource
+def init_manager():
+    return ContactManager()
 
 
-def generate_id():
-    return str(uuid.uuid4())[:8]
-
-
-# ========== Session State ==========
-if 'contacts' not in st.session_state:
-    st.session_state.contacts = load_contacts()
-if 'selected_contact_id' not in st.session_state:
-    st.session_state.selected_contact_id = None
+try:
+    manager = init_manager()
+except ValueError as e:
+    st.error(f"❌ 初始化失敗: {str(e)}")
+    st.info("請設定 .env 檔案中的 SUPABASE_URL 和 SUPABASE_KEY")
+    st.stop()
 
 # ========== 統計資訊 ==========
+
+
+@st.cache_data(ttl=10)
+def get_stats():
+    try:
+        contacts = manager.read()
+        total = len(contacts)
+        categories = {}
+        for c in contacts:
+            cat = c.get('category', '未分類')
+            categories[cat] = categories.get(cat, 0) + 1
+        return total, categories
+    except:
+        return 0, {}
+
+
+total, categories = get_stats()
 col1, col2, col3, col4 = st.columns(4)
-total = len(st.session_state.contacts)
-categories = {}
-for c in st.session_state.contacts:
-    cat = c.get('category', '未分類')
-    categories[cat] = categories.get(cat, 0) + 1
 
 with col1:
     st.metric("📊 總數", total)
@@ -69,70 +70,92 @@ tab1, tab2, tab3, tab4 = st.tabs(
 with tab1:
     st.subheader("📋 聯絡人清單")
 
-    if st.session_state.contacts:
-        for contact in st.session_state.contacts:
-            with st.container(border=True):
-                col1, col2, col3, col4 = st.columns([2, 2, 1, 0.8])
-                with col1:
-                    st.write(f"**{contact['name']}** | {contact['phone']}")
-                    st.caption(f"{contact['company']} · {contact['category']}")
-                with col2:
-                    st.write(f"📧 {contact['email']}")
-                    st.caption(f"備註: {contact['notes'][:30]}")
-                with col3:
-                    st.caption(f"ID: {contact['id']}")
-                with col4:
-                    if st.button("✏️", key=f"edit_{contact['id']}", help="編輯"):
-                        st.session_state.selected_contact_id = contact['id']
-                    if st.button("🗑️", key=f"delete_{contact['id']}", help="刪除"):
-                        st.session_state.contacts = [
-                            c for c in st.session_state.contacts if c['id'] != contact['id']]
-                        save_contacts(st.session_state.contacts)
-                        st.success(f"✅ 已刪除 {contact['name']}！")
-                        st.rerun()
-    else:
-        st.warning("📭 沒有聯絡人，請先新增！")
+    try:
+        contacts = manager.read()
 
-# ========== 編輯區域 (如果選中聯絡人) ==========
-if st.session_state.selected_contact_id:
-    contact = next(
-        (c for c in st.session_state.contacts if c['id'] == st.session_state.selected_contact_id), None)
-    if contact:
-        st.divider()
-        st.subheader(f"✏️ 編輯 - {contact['name']}")
+        if contacts:
+            for contact in contacts:
+                with st.container(border=True):
+                    col1, col2, col3, col4 = st.columns([2, 2, 1, 0.8])
+                    with col1:
+                        st.write(f"**{contact['name']}** | {contact['phone']}")
+                        st.caption(
+                            f"{contact['company']} · {contact['category']}")
+                    with col2:
+                        st.write(f"📧 {contact['email']}")
+                        st.caption(
+                            f"備註: {contact['notes'][:30] if contact.get('notes') else 'N/A'}")
+                    with col3:
+                        st.caption(f"ID: {contact['id'][:8]}")
+                    with col4:
+                        if st.button("✏️", key=f"edit_{contact['id']}", help="編輯"):
+                            st.session_state.selected_contact_id = contact['id']
+                            st.rerun()
+                        if st.button("🗑️", key=f"delete_{contact['id']}", help="刪除"):
+                            try:
+                                manager.delete(contact['id'])
+                                st.success(f"✅ 已刪除 {contact['name']}！")
+                                st.cache_data.clear()
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ 刪除失敗: {str(e)}")
+        else:
+            st.warning("📭 沒有聯絡人，請先新增！")
+    except Exception as e:
+        st.error(f"❌ 讀取聯絡人失敗: {str(e)}")
 
-        col_dummy, col_cancel = st.columns([4, 1])
-        with col_cancel:
-            if st.button("❌ 取消", use_container_width=True, key="cancel_edit"):
-                st.session_state.selected_contact_id = None
-                st.rerun()
+# ========== 編輯區域 (在側邊欄彈出) ==========
+if 'selected_contact_id' in st.session_state and st.session_state.selected_contact_id:
+    try:
+        contact = manager.read(st.session_state.selected_contact_id)
 
-        with st.form("edit_form"):
-            new_name = st.text_input("👤 名稱", value=contact['name'])
-            new_phone = st.text_input("📱 電話", value=contact['phone'])
-            new_email = st.text_input("📧 信箱", value=contact['email'])
-            new_company = st.text_input("🏢 公司", value=contact['company'])
-            new_category = st.selectbox("🏷️ 分類", ["同事", "客戶", "家人", "朋友"],
-                                        index=["同事", "客戶", "家人", "朋友"].index(contact['category']))
-            new_notes = st.text_area("📝 備註", value=contact['notes'])
+        if contact:
+            with st.sidebar:
+                st.divider()
+                st.subheader(f"✏️ 編輯聯絡人")
+                st.caption(f"名稱: {contact['name']}")
 
-            if st.form_submit_button("✅ 更新", use_container_width=True):
-                if not new_name or not new_phone:
-                    st.error("❌ 名稱和電話為必填")
-                elif new_phone != contact['phone'] and any(c['phone'] == new_phone for c in st.session_state.contacts if c['id'] != contact['id']):
-                    st.error(f"❌ 電話 {new_phone} 已被使用")
-                else:
-                    contact['name'] = new_name
-                    contact['phone'] = new_phone
-                    contact['email'] = new_email
-                    contact['company'] = new_company
-                    contact['category'] = new_category
-                    contact['notes'] = new_notes
-                    contact['updated_at'] = datetime.now().isoformat()
-                    save_contacts(st.session_state.contacts)
-                    st.session_state.selected_contact_id = None
-                    st.success(f"✅ 已更新 {new_name}！")
-                    st.rerun()
+                with st.form("edit_form", clear_on_submit=False):
+                    new_name = st.text_input("👤 名稱", value=contact['name'])
+                    new_phone = st.text_input("📱 電話", value=contact['phone'])
+                    new_email = st.text_input(
+                        "📧 信箱", value=contact.get('email', ''))
+                    new_company = st.text_input(
+                        "🏢 公司", value=contact.get('company', ''))
+                    new_category = st.selectbox("🏷️ 分類", ["同事", "客戶", "家人", "朋友"],
+                                                index=["同事", "客戶", "家人", "朋友"].index(contact.get('category', '同事')))
+                    new_notes = st.text_area(
+                        "📝 備註", value=contact.get('notes', ''))
+
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.form_submit_button("✅ 更新", use_container_width=True):
+                            if not new_name or not new_phone:
+                                st.error("❌ 名稱和電話為必填")
+                            else:
+                                try:
+                                    manager.update(
+                                        st.session_state.selected_contact_id,
+                                        name=new_name,
+                                        phone=new_phone,
+                                        email=new_email,
+                                        company=new_company,
+                                        category=new_category,
+                                        notes=new_notes
+                                    )
+                                    st.session_state.selected_contact_id = None
+                                    st.cache_data.clear()
+                                    st.success(f"✅ 已更新 {new_name}！")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"❌ 更新失敗: {str(e)}")
+
+                    with col2:
+                        if st.button("❌ 取消", use_container_width=True, key="cancel_edit"):
+                            st.session_state.selected_contact_id = None
+                            st.rerun()
+    except Exception as e:
+        st.error(f"❌ 載入聯絡人失敗: {str(e)}")
 
 # ========== Tab 2: 新增 ==========
 with tab2:
@@ -149,24 +172,15 @@ with tab2:
         if st.form_submit_button("✅ 新增"):
             if not name or not phone:
                 st.error("❌ 名稱和電話為必填")
-            elif any(c['phone'] == phone for c in st.session_state.contacts):
-                st.error(f"❌ 電話 {phone} 已存在")
             else:
-                contact = {
-                    'id': generate_id(),
-                    'name': name,
-                    'phone': phone,
-                    'email': email,
-                    'company': company,
-                    'category': category,
-                    'notes': notes,
-                    'created_at': datetime.now().isoformat(),
-                    'updated_at': datetime.now().isoformat()
-                }
-                st.session_state.contacts.append(contact)
-                save_contacts(st.session_state.contacts)
-                st.success(f"✅ 新增 {name} 成功！")
-                st.balloons()
+                try:
+                    manager.create(name, phone, email,
+                                   company, category, notes)
+                    st.cache_data.clear()
+                    st.success(f"✅ 新增 {name} 成功！")
+                    st.balloons()
+                except Exception as e:
+                    st.error(f"❌ 新增失敗: {str(e)}")
 
 # ========== Tab 3: 搜尋 ==========
 with tab3:
@@ -175,59 +189,81 @@ with tab3:
     search = st.text_input("輸入名稱或電話")
 
     if search:
-        results = [c for c in st.session_state.contacts
-                   if search.lower() in c['name'].lower() or search in c['phone']]
+        try:
+            results = manager.read_by_name(search)
 
-        if results:
-            st.info(f"🔍 找到 {len(results)} 筆")
-            for contact in results:
-                with st.container(border=True):
-                    col1, col2 = st.columns([4, 0.8])
-                    with col1:
-                        st.write(f"**{contact['name']}** | {contact['phone']}")
-                        st.caption(
-                            f"{contact['company']} · {contact['category']}")
-                    with col2:
-                        if st.button("✏️", key=f"search_edit_{contact['id']}", help="編輯"):
-                            st.session_state.selected_contact_id = contact['id']
-        else:
-            st.warning("❌ 找不到")
+            if results:
+                st.info(f"🔍 找到 {len(results)} 筆")
+                for contact in results:
+                    with st.container(border=True):
+                        col1, col2 = st.columns([4, 0.8])
+                        with col1:
+                            st.write(
+                                f"**{contact['name']}** | {contact['phone']}")
+                            st.caption(
+                                f"{contact['company']} · {contact['category']}")
+                        with col2:
+                            if st.button("✏️", key=f"search_edit_{contact['id']}", help="編輯"):
+                                st.session_state.selected_contact_id = contact['id']
+                                st.rerun()
+            else:
+                st.warning("❌ 找不到")
+        except Exception as e:
+            st.error(f"❌ 搜尋失敗: {str(e)}")
 
 # ========== Tab 4: 統計 ==========
 with tab4:
     st.subheader("📊 統計分析")
 
-    if st.session_state.contacts:
-        col1, col2 = st.columns(2)
+    try:
+        contacts = manager.read()
 
-        with col1:
-            st.write("**按分類統計**")
-            cat_data = {}
-            for c in st.session_state.contacts:
-                cat = c.get('category', '未分類')
-                cat_data[cat] = cat_data.get(cat, 0) + 1
-            st.bar_chart(cat_data)
+        if contacts:
+            col1, col2 = st.columns(2)
 
-        with col2:
-            st.write("**基本統計**")
-            st.write(f"- 總人數: {len(st.session_state.contacts)}")
-            st.write(
-                f"- 有信箱: {len([c for c in st.session_state.contacts if c['email']])}")
-            st.write(
-                f"- 有公司: {len([c for c in st.session_state.contacts if c['company']])}")
-    else:
-        st.warning("📭 沒有資料")
+            with col1:
+                st.write("**按分類統計**")
+                cat_data = {}
+                for c in contacts:
+                    cat = c.get('category', '未分類')
+                    cat_data[cat] = cat_data.get(cat, 0) + 1
+                st.bar_chart(cat_data)
+
+            with col2:
+                st.write("**基本統計**")
+                st.write(f"- 總人數: {len(contacts)}")
+                st.write(
+                    f"- 有信箱: {len([c for c in contacts if c.get('email')])}")
+                st.write(
+                    f"- 有公司: {len([c for c in contacts if c.get('company')])}")
+        else:
+            st.warning("📭 沒有資料")
+    except Exception as e:
+        st.error(f"❌ 統計失敗: {str(e)}")
 
 # ========== 側邊欄 ==========
 st.sidebar.divider()
 st.sidebar.subheader("💾 資料管理")
 
 if st.sidebar.button("🗑️ 刪除所有 (需確認)", use_container_width=True):
-    st.session_state.contacts = []
-    save_contacts([])
-    st.sidebar.success("✅ 已清空")
+    try:
+        count = manager.delete_all()
+        st.cache_data.clear()
+        st.sidebar.success(f"✅ 已清空 {count} 筆聯絡人")
+        st.rerun()
+    except Exception as e:
+        st.sidebar.error(f"❌ 清空失敗: {str(e)}")
+
+st.sidebar.divider()
+
+if st.sidebar.button("🔄 重新整理", use_container_width=True):
+    st.cache_data.clear()
     st.rerun()
 
 st.sidebar.divider()
-st.sidebar.info(f"📊 共 {len(st.session_state.contacts)} 位聯絡人")
-st.sidebar.info("💾 存儲於 contacts.json")
+try:
+    contact_count = len(manager.read())
+    st.sidebar.info(f"📊 共 {contact_count} 位聯絡人")
+    st.sidebar.info("☁️ 存儲於 Supabase 雲端")
+except:
+    st.sidebar.warning("⚠️ 無法連接到 Supabase")
