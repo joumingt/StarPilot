@@ -6,10 +6,6 @@ import streamlit as st
 from contact_manager import ContactManager
 from datetime import datetime
 import os
-from dotenv import load_dotenv
-
-# 載入環境變數
-load_dotenv()
 
 st.set_page_config(page_title="📇 通訊錄", layout="wide")
 

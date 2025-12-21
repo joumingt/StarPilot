@@ -7,10 +7,13 @@ import os
 from datetime import datetime
 from typing import List, Dict, Optional
 from supabase import create_client, Client
-from dotenv import load_dotenv
 
-# 載入環境變數
-load_dotenv()
+# 嘗試載入環境變數（本地開發）
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 
 class ContactManager:
@@ -23,13 +26,26 @@ class ContactManager:
         環境變數需要：
         - SUPABASE_URL: Supabase 專案 URL
         - SUPABASE_KEY: Supabase API Key
+
+        優先順序：
+        1. Streamlit Secrets (部署到 Streamlit Cloud)
+        2. 環境變數 (本地開發)
         """
-        self.supabase_url = os.getenv("SUPABASE_URL")
-        self.supabase_key = os.getenv("SUPABASE_KEY")
+        # 優先使用 Streamlit Secrets
+        try:
+            import streamlit as st
+            self.supabase_url = st.secrets.get("SUPABASE_URL")
+            self.supabase_key = st.secrets.get("SUPABASE_KEY")
+        except (ImportError, AttributeError):
+            # 回退到環境變數
+            self.supabase_url = os.getenv("SUPABASE_URL")
+            self.supabase_key = os.getenv("SUPABASE_KEY")
 
         if not self.supabase_url or not self.supabase_key:
             raise ValueError(
-                "請設定 SUPABASE_URL 和 SUPABASE_KEY 環境變數")
+                "請設定 SUPABASE_URL 和 SUPABASE_KEY\n"
+                "本地開發: 設定 .env 檔案\n"
+                "Streamlit Cloud: 設定 Secrets (Settings → Secrets)")
 
         self.client: Client = create_client(
             self.supabase_url, self.supabase_key)
